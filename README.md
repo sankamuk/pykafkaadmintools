@@ -35,7 +35,7 @@ git clone https://github.com/sankamuk/pykafkaadmintools.git
 pip install -r requirements.txt 
 ```
 
-- Configure tool by updating `tools.config`. Detail in Wiki page.
+- Configure tool by updating `tools.config`. Detail in [Wiki page](https://github.com/sankamuk/pykafkaadmintools/wiki/Configure-Tool).
 
 
 - Start the tool.
