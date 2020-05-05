@@ -43,6 +43,13 @@ pip install -r requirements.txt
 nohup python app.py & 
 ```
 
+## Usage
+
+Once started you should have the swagger available (with documentation of the individual REST endpoints) in below url.
+
+
+`http[s]://[app.hostname]:[app.port]`
+
 
 ## Troubleshoot
 
