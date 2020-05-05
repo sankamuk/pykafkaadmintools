@@ -8,11 +8,11 @@ Currently we do not have a simple Kafka Cluster administration tool available an
 
 <ins>***Features***</ins>
 
-- Rest endpoints for all major Kafka administration operations. Enables complete remote administration.
-- Swagger UI for human interaction to the tool.
-- Support for Topic creation, deletion, update and configuration.
-- Support Zookeeper (Native) based Topic Authorisation (ACL) policy creation, deletion, updation and listing.
-- Supports Kafka Cluster services (Kafka, Zookeeper, etc) management like start, stop, status check.
+- `Rest endpoints` for all major Kafka administration operations. Enables complete remote administration.
+- `Swagger UI` for human interaction to the tool.
+- Support for `Topic` creation, deletion, update and configuration.
+- Support Zookeeper (Native) based Topic Authorisation (`ACL`) policy creation, deletion, updation and listing.
+- Supports Kafka Cluster `services` (Kafka, Zookeeper, etc) management like start, stop, status check.
 - Suports Transport layer security and Authentication (file based out of the box) for Rest endpoints.
 
 ## Installation
