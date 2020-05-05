@@ -1,3 +1,4 @@
+import logging
 import paramiko
 from flask import Flask, request
 from flask_restplus import Api, Resource, fields
@@ -45,12 +46,14 @@ api = Api(app = app,
           description = "Python Kafka Cluster Admin Tool",
           authorizations=authorizations)
 
+logging.basicConfig(filename='pykafkaadmintools.log', level=logging.DEBUG)
+
 #####################################################################################################################
 # Utility Functions
 #####################################################################################################################
 def remote_execute(host, service, action, state=None) :
 
-  print("Function: remote_execute, Host: {0}, Service: {1}, Action: {2}, State: {3}.".format(host, service, action, state))
+  app.logger.info("Function: remote_execute, Host: {0}, Service: {1}, Action: {2}, State: {3}.".format(host, service, action, state))
   username = config['ssh.user']
   password = config['ssh.password']
   command_config = "ssh.{}.service_script".format(service.lower())
@@ -83,17 +86,7 @@ def remote_execute(host, service, action, state=None) :
       return "success"
     else :
       return "error"
-
-
-#####################################################################################################################
-# Kafka Admin Client
-#####################################################################################################################
-
-admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
-                          security_protocol=config['cluster.security.protocol'], 
-                          ssl_cafile=config['cluster.ssl.cafile'], 
-                          ssl_certfile=config['cluster.ssl.certfile'], 
-                          ssl_keyfile=config['cluster.ssl.keyfile']) 
+ 
 
 #####################################################################################################################
 # Topic Management
@@ -116,16 +109,22 @@ class Topic(Resource):
     Get Topic Detail.
 
     """
-    print("Request to get details for topic {0}.".format(topicName))
+    app.logger.info("Request to get details for topic {0}.".format(topicName))
     try :
-
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       result = admin.describe_topics([topicName])
 
     except UnknownTopicOrPartitionError as e:
       api.abort(500, e.description)
     except Exception as e:
       api.abort(500, str(e.args))
-    print(result)
+    finally:
+      admin.close()
+    app.logger.debug(result)
 
     if result[0]['error_code'] == 0 :
       return { 'partitions': len(result[0]['partitions']), 'replicas': len(result[0]['partitions'][0]['replicas']) }
@@ -143,9 +142,14 @@ class Topic(Resource):
     """
     partitions = request.json['partitions']
     replicas = request.json['replicas']
-    print("Request to create topic witn name {0} and {1} partitions and {2} replicas.".format(topicName, partitions, replicas))
+    app.logger.info("Request to create topic witn name {0} and {1} partitions and {2} replicas.".format(topicName, partitions, replicas))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       newTopic = NewTopic(topicName, partitions, replicas)
       result = admin.create_topics([newTopic]) 
 
@@ -157,7 +161,10 @@ class Topic(Resource):
       api.abort(400, e.description)
     except Exception as e:
       api.abort(500, str(e.args))
-    print(result)
+    finally:
+      admin.close()
+
+    app.logger.debug(result)
 
     if result.topic_errors[0][1] == 0 :
       return { "created": topicName }
@@ -173,16 +180,24 @@ class Topic(Resource):
     Delete Topic.
 
     """
-    print("Request to delete topic witn name {0}.".format(topicName))
+    app.logger.info("Request to delete topic witn name {0}.".format(topicName))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       result = admin.delete_topics([topicName])
 
     except UnknownTopicOrPartitionError as e:
       api.abort(400, e.description)
     except Exception as e:
       api.abort(500, str(e.args))
-    print(result)
+    finally:
+      admin.close()
+
+    app.logger.debug(result)
 
     if result.topic_error_codes[0][1] == 0 :
       return { "deleted": topicName }
@@ -197,13 +212,20 @@ class Topics(Resource):
     Get List of Topics.
 
     """
-    print("Request to get list of topics.")
+    app.logger.info("Request to get list of topics.")
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       return admin.list_topics()
 
     except Exception as e:
       ns_topic.abort(500, str(e.args))
+    finally:
+      admin.close()
 
 ns_topic.add_resource(Topics, '/listtopics', methods=['GET'])
 
@@ -228,9 +250,14 @@ class Config(Resource):
     Get Topic Configuration.
 
     """
-    print("Request to get Configuration for topic {0}.".format(topicName))
+    app.logger.info("Request to get Configuration for topic {0}.".format(topicName))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       config_list = []
       config = ConfigResource(ConfigResourceType.TOPIC, topicName)
       topic_configs = admin.describe_configs([config])
@@ -241,6 +268,8 @@ class Config(Resource):
 
     except Exception as e:
       ns_topic.abort(500, str(e.args))
+    finally:
+      admin.close()
 
   decorators = [requires_Auth]
   @ns_topic.doc(security='basicAuth')
@@ -252,9 +281,14 @@ class Config(Resource):
     """
     ckey = request.json['key']
     cvalue = request.json['value']
-    print("Request to update configuration for topic {0} for key {1} and value {2}.".format(topicName, ckey, cvalue))
+    app.logger.info("Request to update configuration for topic {0} for key {1} and value {2}.".format(topicName, ckey, cvalue))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       new_config = ConfigResource(ConfigResourceType.TOPIC, topicName, { ckey: cvalue })
       result = admin.alter_configs([new_config])
 
@@ -262,6 +296,8 @@ class Config(Resource):
       api.abort(400, e.description)    
     except Exception as e:
       ns_topic.abort(500, str(e.args))
+    finally:
+      admin.close()
 
     if result.resources[0][0] == 0 :
       return { "configured": topicName }
@@ -295,9 +331,14 @@ class ACL(Resource):
     Get Topic ACL.
 
     """
-    print("Request to get ACL for topic {0}.".format(topicName))
+    app.logger.info("Request to get ACL for topic {0}.".format(topicName))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       acl_filter = ACLFilter( principal=None,
                               host="*",
                               operation=ACLOperation.ANY,
@@ -314,6 +355,8 @@ class ACL(Resource):
 
     except Exception as e:
       ns_acl.abort(500, str(e.args))
+    finally:
+      admin.close()
 
   decorators = [requires_Auth]
   @ns_acl.doc(security='basicAuth')
@@ -327,9 +370,14 @@ class ACL(Resource):
     auser = args['user']
     atype = args['type']
     acl_user = "User:"+auser
-    print("Request to create ACL for topic {0} for user {1} and access type {2}.".format(topicName, auser, atype))
+    app.logger.info("Request to create ACL for topic {0} for user {1} and access type {2}.".format(topicName, auser, atype))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       if atype == 'READ' :
         acl1 = ACL( principal=acl_user,
                     host="*",
@@ -383,6 +431,8 @@ class ACL(Resource):
 
     except Exception as e:
       ns_acl.abort(500, str(e.args))
+    finally:
+      admin.close()
 
     if len(result["failed"]) == 0 :
       return { "creation": "success" }
@@ -402,9 +452,14 @@ class ACL(Resource):
     auser = args['user']
     atype = args['type']
     acl_user = "User:"+auser
-    print("Request to delete ACL for topic {0} for user {1} and access type {2}.".format(topicName, auser, atype))
+    app.logger.info("Request to delete ACL for topic {0} for user {1} and access type {2}.".format(topicName, auser, atype))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       results = admin.delete_acls([ACLFilter( principal=acl_user,
                                               host="*",
                                               operation=ACLOperation.ANY,
@@ -413,6 +468,8 @@ class ACL(Resource):
 
     except Exception as e:
       ns_acl.abort(500, str(e.args))
+    finally:
+      admin.close()      
 
     if len(results[0][1]) > 0 :
       return { "delete": "sucess" }
@@ -447,7 +504,7 @@ class Service(Resource):
     Get Service State.
 
     """
-    print("Request to get details for service {0}.".format(serviceName))
+    app.logger.info("Request to get details for service {0}.".format(serviceName))
     try :
 
       state_list = []
@@ -473,7 +530,7 @@ class Service(Resource):
     args = service_detail_parse.parse_args()
     host = args['host']
     state = args['state']
-    print("Request for service {0} on host {1} to {2} state.".format(serviceName, host, state))
+    app.logger.info("Request for service {0} on host {1} to {2} state.".format(serviceName, host, state))
     try :
 
       status = remote_execute(host, serviceName.lower(), 'set', state)
@@ -481,6 +538,7 @@ class Service(Resource):
 
     except Exception as e:
       ns_service.abort(500, str(e.args))
+
 
 #####################################################################################################################
 # Application Launcher
