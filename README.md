@@ -5,7 +5,8 @@ Python Flask based Kafka Cluster Administration Tool
 
 Currently we do not have a simple Kafka Cluster administration tool available and ditributed with Apache Kafka. This is a simple Python Flask based Kafka Administration tool which publish Rest interface to perform different Kafka cluster administration tasks.
 
-*Features*
+
+<ins>***Features***</ins>
 
 - Rest endpoints for all major Kafka administration operations. Enables complete remote administration.
 - Swagger UI for human interaction to the tool.
@@ -21,7 +22,8 @@ Below is the requirement of the host running the tool.
 - Connectivity to the Kafka Cluster (note you need connectivity for Kafka and SSH service).
 - Python 3 installed. 
 
-*Installation Steps*
+
+<ins>***Installation Steps***</ins>
 
 - Download or Clone this repository.
 ```
@@ -40,6 +42,7 @@ pip install -r requirements.txt
 ```
 nohup python app.py & 
 ```
+
 
 ## Troubleshoot
 
