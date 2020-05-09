@@ -56,6 +56,7 @@ Once started you should have the swagger available (with documentation of the in
 While running you can always run into issue and the best way to resolve issue is by looking into the log. The tool should log all its action to a log file name `pykafkaadmintools.log` in the same directory.
 
 
+## Usage Demo
 
-
+I will try to provide some demonstration of usage in the [blog](https://mukherjeesankar.wordpress.com/2020/05/09/setup-kafka-administer-remotely-with-kafkaadmintools/).
 
