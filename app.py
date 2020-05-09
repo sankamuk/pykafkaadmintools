@@ -1,3 +1,4 @@
+import os, datetime
 import logging
 import paramiko
 from flask import Flask, request
@@ -46,7 +47,8 @@ api = Api(app = app,
           description = "Python Kafka Cluster Admin Tool",
           authorizations=authorizations)
 
-logging.basicConfig(filename='pykafkaadmintools.log', level=logging.DEBUG)
+#logging.basicConfig(filename='pykafkaadmintools.log', level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 
 #####################################################################################################################
 # Utility Functions
@@ -87,6 +89,40 @@ def remote_execute(host, service, action, state=None) :
     else :
       return "error"
  
+def scp(host, action, tmpFile) :
+
+  app.logger.info("Function: scp, Host: {0}, Action Type: {1}, Temporary Local File: {2}.".format(host, action, tmpFile))
+  username = config['ssh.user']
+  password = config['ssh.password']
+  brkconf = config['cluster.kafka.config']
+  sf = paramiko.Transport((host, 22))
+  sf.connect(username = username, password = password)
+  sftp = paramiko.SFTPClient.from_transport(sf)
+
+  if action == 'get' :
+    sftp.get( brkconf, tmpFile )
+  elif action == 'put' :
+    sftp.put( tmpFile, brkconf )
+
+
+def backup(host) :
+
+  app.logger.info("Function: backup, Host: {0}.".format(host))
+  username = config['ssh.user']
+  password = config['ssh.password']
+  brkconf = config['cluster.kafka.config']
+  bcktmps = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+  command = "cp {0} {0}.{1}".format(brkconf, bcktmps)
+
+  client = paramiko.SSHClient()
+  client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+  client.connect(host, username=username, password=password)
+  stdin, stdout, stderr = client.exec_command(command)
+
+  if len(stderr.readlines()) != 0 :
+    return False
+  else :
+    return True
 
 #####################################################################################################################
 # Topic Management
@@ -507,6 +543,11 @@ class Service(Resource):
     app.logger.info("Request to get details for service {0}.".format(serviceName))
     try :
 
+      admin = KafkaAdminClient( bootstrap_servers=config['cluster.broker.listeners'], 
+                          security_protocol=config['cluster.security.protocol'], 
+                          ssl_cafile=config['cluster.ssl.cafile'], 
+                          ssl_certfile=config['cluster.ssl.certfile'], 
+                          ssl_keyfile=config['cluster.ssl.keyfile'])
       state_list = []
       if serviceName.lower() == 'kafka' :
         for n in admin.describe_cluster()['brokers'] :
@@ -517,6 +558,8 @@ class Service(Resource):
 
     except Exception as e:
       ns_service.abort(500, str(e.args))
+    finally:
+      admin.close() 
 
 
   decorators = [requires_Auth]
@@ -538,6 +581,120 @@ class Service(Resource):
 
     except Exception as e:
       ns_service.abort(500, str(e.args))
+
+
+#####################################################################################################################
+# Kafka Broker Configuration Management
+#####################################################################################################################
+
+ns_brokercfg = api.namespace("brokercfg", description="Manage Kafka Cluster Broker Configuration")
+
+brokercfg_detail = api.model( 'BrokercfgDetail', {'host': fields.String(description="Broker Host"),
+                                                  'key': fields.String(description="Configuration Key"), 
+                                                  'value': fields.String(description="Configuration Value")} ) 
+
+@ns_brokercfg.route("/")
+class BrokerCfg(Resource):
+
+  decorators = [requires_Auth]
+  @ns_brokercfg.doc(security='basicAuth')
+  @ns_brokercfg.marshal_with(brokercfg_detail)
+  def get(self):
+    """
+    Get Broker Configuration of all Hosts.
+
+    """
+    app.logger.info("Request to get Configuration for Broker.")
+
+    try:
+      
+      result =[]
+      app_client = app.test_client()
+      cluster = app_client.get('/service/kafka', headers=list(request.headers))
+      broker_list = cluster.json
+      for b in broker_list :
+
+        app.logger.info("Hostname {}".format(b['host']))
+        tmpfile = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+        scp(b['host'], 'get', tmpfile)  
+        if os.path.exists(tmpfile) :
+          try :
+            with open(tmpfile) as f:
+              for i in f.readlines() :
+                if "=" in i and i.lstrip()[0] != "#" :
+                  result.append({ "host": b['host'], "key": i.split('=')[0], "value": "=".join(i.rstrip().split('=')[1:]) })
+              app.logger.debug("Current configuration list: ")
+              app.logger.debug(result)
+          except Exception as e:
+            ns_brokercfg.abort(500, str(e.args))
+          finally:      
+            if tmpfile != None and os.path.exists(tmpfile) :
+              os.remove(tmpfile)        
+        else :
+          ns_brokercfg.abort(500, "{ 'status': 'failed'}")
+
+      return result
+
+    except Exception as e:
+      ns_brokercfg.abort(500, str(e.args))
+
+
+
+  decorators = [requires_Auth]
+  @ns_brokercfg.doc(security='basicAuth')
+  @ns_brokercfg.expect(brokercfg_detail)
+  def put(self):
+    """
+    Update Broker Configuration on a Host.
+
+    """
+    chost = request.json['host']
+    ckey = request.json['key']
+    cvalue = request.json['value']
+    app.logger.info("Request to update broker configuration with key {1} and value {2} on host {0}.".format(chost, ckey, cvalue))
+    try :
+
+      app.logger.info("Pulling Configuration for Hostname {}".format(chost))
+      hconfig = {}
+      tmpfile = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+      scp(chost, 'get', tmpfile)  
+      if os.path.exists(tmpfile) :
+        try :
+          with open(tmpfile) as f:
+            for i in f.readlines() :
+              if "=" in i and i.lstrip()[0] != "#" :
+                hconfig[i.split('=')[0]] = "=".join(i.rstrip().split('=')[1:])               
+        except Exception as e:
+          app.logger.error("Failed to pull broker configuration")
+          ns_brokercfg.abort(500, str(e.args))
+        finally:      
+          if tmpfile != None and os.path.exists(tmpfile) :
+            os.remove(tmpfile)
+      app.logger.debug("Current configuration list: ")
+      app.logger.debug(hconfig)
+
+      app.logger.info("Backing up Configuration for Hostname {}".format(chost))
+      backup(chost)
+
+      app.logger.info("Updating Configuration for Hostname {}".format(chost))
+      tmpfile = datetime.datetime.now().strftime("%y%m%d_%H%M%S")
+      hconfig[ckey] = cvalue
+      try :
+        with open(tmpfile, 'w') as f:
+          for k in hconfig.keys():
+            f.write("{0}={1}\n".format(k, hconfig[k]))
+        scp(chost, 'put', tmpfile)
+      except Exception as e:
+        app.logger.error("Failed to replace broker configuration")
+        ns_brokercfg.abort(500, str(e.args))
+      finally:      
+        if tmpfile != None and os.path.exists(tmpfile) :
+          os.remove(tmpfile)      
+      return {'status': 'success'}  
+
+    except Exception as e:
+      ns_topic.abort(500, str(e.args))
+
 
 
 #####################################################################################################################
