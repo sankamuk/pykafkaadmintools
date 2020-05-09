@@ -47,12 +47,13 @@ api = Api(app = app,
           description = "Python Kafka Cluster Admin Tool",
           authorizations=authorizations)
 
-#logging.basicConfig(filename='pykafkaadmintools.log', level=logging.DEBUG)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(filename='pykafkaadmintools.log', level=logging.DEBUG)
 
 #####################################################################################################################
 # Utility Functions
 #####################################################################################################################
+
+# Function to perform service start, stop, status check
 def remote_execute(host, service, action, state=None) :
 
   app.logger.info("Function: remote_execute, Host: {0}, Service: {1}, Action: {2}, State: {3}.".format(host, service, action, state))
@@ -89,6 +90,7 @@ def remote_execute(host, service, action, state=None) :
     else :
       return "error"
  
+# Function to SCP file from tool host to Kafka broker hosts over SSH
 def scp(host, action, tmpFile) :
 
   app.logger.info("Function: scp, Host: {0}, Action Type: {1}, Temporary Local File: {2}.".format(host, action, tmpFile))
@@ -105,6 +107,7 @@ def scp(host, action, tmpFile) :
     sftp.put( tmpFile, brkconf )
 
 
+# Function to backup Kafka configuration on a broker host
 def backup(host) :
 
   app.logger.info("Function: backup, Host: {0}.".format(host))
