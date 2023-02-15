@@ -1,4 +1,4 @@
 paramiko
 flask-restplus
 kafka-python
-Werkzeug==0.16.1
+Werkzeug==2.2.3
